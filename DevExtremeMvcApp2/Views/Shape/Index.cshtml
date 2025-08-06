@@ -1,0 +1,211 @@
+﻿@using Microsoft.AspNet.Identity;
+
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    var userId = User.Identity.GetUserId();
+}
+
+<div id="gridContainer"></div>
+
+@section Scripts {
+    <script>
+        const userId = '@userId';
+        console.log("Aktif kullanıcı ID:", userId);
+
+        function calculateUncalculatedRows() {
+            $.ajax({
+                url: 'http://localhost:5001/api/shape-forward/calculate?userId=' + userId,
+                method: 'POST',
+                success: function () {
+                    DevExpress.ui.notify("Hesaplama tamamlandı.", "success", 2000);
+                    $("#gridContainer").dxDataGrid("instance").refresh();
+                },
+                error: function () {
+                    DevExpress.ui.notify("Hesaplama başarısız oldu.", "error", 2000);
+                }
+            });
+        }
+
+        $(function () {
+            var dataSource = new DevExpress.data.DataSource({
+                key: "Id",
+                load: function () {
+                    return $.ajax({
+                        url: 'http://localhost:5001/api/shape-forward?userId=' + userId,
+                        method: 'GET',
+                        xhrFields: { withCredentials: true }
+                    });
+                },
+                insert: function (values) {
+                    values.userId = userId;
+                    values.IsCalculated = false;
+                    values.CalculationResult = null;
+                    return $.ajax({
+                        url: 'http://localhost:5001/api/shape-forward',
+                        method: 'POST',
+                        data: JSON.stringify(values),
+                        contentType: "application/json"
+                    });
+                },
+                update: function (key, values) {
+                    values.userId = userId;
+                    return $.ajax({
+                        url: 'http://localhost:5001/api/shape-forward/' + key + '?userID=' + userId,
+                        method: 'PUT',
+                        data: JSON.stringify(values),
+                        contentType: "application/json"
+                    });
+                },
+                remove: function (key) {
+                    return $.ajax({
+                        url: 'http://localhost:5001/api/shape-forward/' + key + '?userID=' + userId,
+                        method: 'DELETE'
+                    });
+                }
+            });
+
+            $("#gridContainer").dxDataGrid({
+                dataSource: dataSource,
+                keyExpr: "Id",
+                showBorders: true,
+                paging: {
+                    pageSize: 10
+                },
+                editing: {
+                    mode: "cell",
+                    allowAdding: true,
+                    allowUpdating: true,
+                    allowDeleting: true
+                },
+                columns: [
+                    {
+                        dataField: "IsCalculated",
+                        caption: "",
+                        allowEditing: false,
+                        width: 60,
+                        cellTemplate: function (container, options) {
+                            if (options.data.IsCalculated) {
+                                $("<div>")
+                                    .addClass("dx-icon-check")
+                                    .css({ color: "green", textAlign: "center" })
+                                    .appendTo(container);
+                            }
+                        }
+                    },
+                    {
+                        dataField: "Shape",
+                        caption: "Shape",
+                        dataType: "string",
+                        validationRules: [{ type: "required" }],
+                        lookup: {
+                            dataSource: ["Square", "Rectangle", "Triangle"],
+                            valueExpr: "this",
+                            displayExpr: "this"
+                        }
+                    },
+                    {
+                        dataField: "Width",
+                        caption: "Width",
+                        dataType: "number",
+                        validationRules: [
+                            { type: "required" },
+                            { type: "range", min: 1, max: 120 }
+                        ]
+                    },
+                    {
+                        dataField: "Height",
+                        caption: "Height",
+                        dataType: "number",
+                        validationRules: [
+                            { type: "range", min: 1, max: 120 }
+                        ]
+                    },
+                    {
+                        dataField: "CalculationResult",
+                        caption: "Calculation Result",
+                        dataType: "number",
+                        allowEditing: false
+                    }
+                ],
+                toolbar: {
+                    items: [
+                        {
+                            location: "before",
+                            widget: "dxButton",
+                            options: {
+                                icon: "plus",
+                                hint: "Add New Shape",
+                                onClick: function () {
+                                    var grid = $("#gridContainer").dxDataGrid("instance");
+                                    grid.addRow();
+                                }
+                            }
+                        },
+                        {
+                            location: "before",
+                            widget: "dxButton",
+                            options: {
+                                icon: "save",
+                                hint: "Save",
+                                onClick: function () {
+                                    var grid = $("#gridContainer").dxDataGrid("instance");
+                                    grid.saveEditData();
+                                }
+                            }
+                        },
+                        {
+                            location: "before",
+                            widget: "dxButton",
+                            options: {
+                                icon: "revert",
+                                hint: "Cancel",
+                                onClick: function () {
+                                    var grid = $("#gridContainer").dxDataGrid("instance");
+                                    grid.cancelEditData();
+                                }
+                            }
+                        },
+                        {
+                            location: "before",
+                            widget: "dxButton",
+                            options: {
+                                text: "Calculate",
+                                icon: "calculate",
+                                type: "default",
+                                onClick: function () {
+                                    calculateUncalculatedRows();
+                                }
+                            }
+                        }
+                    ]
+                },
+                onEditorPreparing: function (e) {
+                    if (e.dataField === "Height" && e.parentType === "dataRow") {
+                        const shape = e.row?.data?.Shape;
+                        e.editorOptions.disabled = (shape === "Square");
+                    }
+                },
+                onCellValueChanged: function (e) {
+                    const grid = e.component;
+                    const rowIndex = e.rowIndex;
+
+                    if (e.dataField === "Shape") {
+                        const shape = e.value;
+                        if (shape === "Square") {
+                            const width = grid.cellValue(rowIndex, "Width") || 0;
+                            grid.cellValue(rowIndex, "Height", width);
+                        }
+                    }
+
+                    if (e.dataField === "Width") {
+                        const shape = grid.cellValue(rowIndex, "Shape");
+                        if (shape === "Square") {
+                            const width = e.value;
+                            grid.cellValue(rowIndex, "Height", width);
+                        }
+                    }
+                }
+            });
+        });
+    </script>
+}

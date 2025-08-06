@@ -1,0 +1,24 @@
+body {
+    background-image: url('/Content/images/background.jpg');
+    background-size: cover;
+    background-repeat: no-repeat;
+    background-attachment: fixed;
+    background-position: center;
+    font-family: 'Rubik','High Tower Text';
+}
+
+
+#submit-button:hover{
+    background-color: white;
+    color:black;
+    box-shadow:rgba(0,0,0,0.1) 2px 2px ;
+}
+
+
+.outer-container {
+    perspective: 1000px;
+    width: 400px;
+    margin: 100px auto;
+}
+
+

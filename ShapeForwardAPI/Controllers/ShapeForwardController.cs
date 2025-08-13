@@ -14,6 +14,14 @@ namespace ShapeForwardAPI.Controllers
     {
         private readonly HttpClient _httpClient;
 
+        private static readonly string[] processingApiUrls = new[]
+        {
+            "http://localhost:5002/api/shape-processing/calculate-batch",
+            "http://localhost:5003/api/shape-processing/calculate-batch"
+        };
+
+        private static int _lastUsedApiIndex = 0; 
+
         public ShapeForwardController()
         {
             _httpClient = new HttpClient();
@@ -83,8 +91,9 @@ namespace ShapeForwardAPI.Controllers
 
         [HttpPost]
         [Route("calculate")]
-        public async Task<IHttpActionResult> CalculateUncalculated([FromUri] string userId)
+        public async Task<IHttpActionResult> CalculateUncalculatedBalanced([FromUri] string userId)
         {
+            
             var getResponse = await _httpClient.GetAsync($"api/shape-processing?userId={userId}");
             if (!getResponse.IsSuccessStatusCode)
                 return Content(getResponse.StatusCode, "Error retrieving shapes");
@@ -92,34 +101,58 @@ namespace ShapeForwardAPI.Controllers
             var getJson = await getResponse.Content.ReadAsStringAsync();
             var allShapes = JsonConvert.DeserializeObject<List<ShapeInput>>(getJson);
 
-            var uncalculatedShapes = allShapes
-                .Where(s => s.IsCalculated == false)
+            var uncalculated = allShapes
+                .Where(s => !s.IsCalculated)
                 .ToList();
 
-            if (!uncalculatedShapes.Any())
-                return Ok("No uncalculated shapes.");
+            if (!uncalculated.Any())
+                return Ok("No uncalculated shapes found.");
 
-            foreach (var shape in uncalculatedShapes)
+            
+            var shapeBatches = uncalculated
+                .Select((s, i) => new { s, Index = i })
+                .GroupBy(x => x.Index / 2)
+                .Select(g => g.Select(x => x.s).ToList())
+                .ToList();
+
+            var processingTasks = new List<Task>();
+
+            foreach (var batch in shapeBatches)
             {
                 
-                if (shape.Shape == "Square" || shape.Shape == "Rectangle")
-                    shape.CalculationResult = (int)(shape.Width * shape.Height);
-                else if (shape.Shape == "Triangle")
-                    shape.CalculationResult = (int)((shape.Width * shape.Height) / 2);
-                else
-                    shape.CalculationResult = 0;
+                var apiUrl = processingApiUrls[_lastUsedApiIndex];
+                _lastUsedApiIndex = (_lastUsedApiIndex + 1) % processingApiUrls.Length;
 
-                shape.IsCalculated = true;
-
-                var json = JsonConvert.SerializeObject(shape);
+                var json = JsonConvert.SerializeObject(batch);
                 var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
 
-                var putResponse = await _httpClient.PutAsync($"api/shape-processing/{shape.Id}?userId={userId}", content);
-                if (!putResponse.IsSuccessStatusCode)
-                    continue; 
+                var task = Task.Run(async () =>
+                {
+                    var client = new HttpClient();
+                    try
+                    {
+                        var response = await client.PostAsync($"{apiUrl}?userId={userId}", content);
+                        if (!response.IsSuccessStatusCode)
+                        {
+                            
+                            System.Diagnostics.Debug.WriteLine($"Batch gönderilemedi: {response.StatusCode}");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"API çağrısı hatası: {ex.Message}");
+                    }
+                });
+
+                processingTasks.Add(task);
             }
 
-            return Ok("Calculation completed.");
+            await Task.WhenAll(processingTasks);
+
+            return Ok("All batches sent for calculation.");
         }
-      }
+
+
+
+    }
     }

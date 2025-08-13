@@ -1,6 +1,10 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Net.Http;
+using System.Threading.Tasks;
 using System.Web.Http;
+using Newtonsoft.Json;
 using ShapeProcessingAPI.Models;
 
 namespace ShapeProcessingAPI.Controllers
@@ -56,7 +60,7 @@ namespace ShapeProcessingAPI.Controllers
             if (input.Height != null)
                 userShape.Height = input.Shape == "Square" ? input.Width : input.Height;
 
-            // ✅ Calculation alanlarını da güncelle
+            
             userShape.CalculationResult = input.CalculationResult;
             userShape.IsCalculated = input.IsCalculated;
 
@@ -100,6 +104,56 @@ namespace ShapeProcessingAPI.Controllers
 
             return Ok(list);
         }
+
+
+        [HttpPost]
+        [Route("calculate-batch")]
+        public IHttpActionResult CalculateBatch([FromBody] List<ShapeInput> shapes, [FromUri] string userId)
+        {
+            if (string.IsNullOrEmpty(userId))
+                return BadRequest("UserId is required.");
+
+            foreach (var input in shapes)
+            {
+                var shape = _context.ShapeInputs.FirstOrDefault(s => s.Id == input.Id && s.UserId == userId);
+                if (shape == null)
+                    continue;
+
+                Console.WriteLine($"[ShapeProcessingAPI:{Request.RequestUri}] İşleniyor -> ID: {shape.Id}, Shape: {shape.Shape}");
+
+                switch (shape.Shape)
+                {
+                    case "Square":
+                        shape.Height = shape.Width;
+                        shape.CalculationResult = (int)(shape.Width * shape.Width);
+                        break;
+                    case "Rectangle":
+                        shape.CalculationResult = (int)(shape.Width * shape.Height);
+                        break;
+                    case "Triangle":
+                        shape.CalculationResult = (int)(shape.Width * shape.Height) / 2;
+                        break;
+                    default:
+                        shape.CalculationResult = 0;
+                        break;
+                }
+                Console.WriteLine($"[DEBUG] Shape={shape.Shape}, Width={shape.Width}, Height={shape.Height}, Result={shape.CalculationResult}");
+                System.Diagnostics.Debug.WriteLine($"[DEBUG] Shape={shape.Shape}, Width={shape.Width}, Height={shape.Height}, Result={shape.CalculationResult}");
+
+                shape.IsCalculated = true;
+            }
+
+            _context.SaveChanges();
+
+           
+
+
+            return Ok("Batch calculation completed.");
+        }
+
+
+
+
 
         protected override void Dispose(bool disposing)
         {

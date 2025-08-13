@@ -13,6 +13,7 @@ namespace ShapeProcessingAPI
     {
         protected void Application_Start()
         {
+            Console.WriteLine("=== ShapeProcessingAPI Başladı ===");
             AreaRegistration.RegisterAllAreas();
             GlobalConfiguration.Configure(WebApiConfig.Register);
             FilterConfig.RegisterGlobalFilters(GlobalFilters.Filters);

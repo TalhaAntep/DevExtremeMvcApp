@@ -21,4 +21,39 @@ body {
     margin: 100px auto;
 }
 
+.shape-button {
+    width: 120px;
+    height: 120px;
+    background: #3498db;
+    border: none;
+    outline: none;
+    padding: 0;
+    margin: 0;
+    color: white;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    animation: shapeChange 3s infinite;
+    transition: all 0.5s ease-in-out;
+}
+
+/* Þekil deðiþtirme animasyonu */
+@keyframes shapeChange {
+    0% {
+        clip-path: inset(0 0 0 0); /* Kare */
+    }
+
+    33% {
+        clip-path: inset(0 20px 0 20px); /* Dikdörtgen */
+    }
+
+    66% {
+        clip-path: polygon(50% 0%, 0% 100%, 100% 100%); /* Üçgen */
+    }
+
+    100% {
+        clip-path: inset(0 0 0 0); /* Kare */
+    }
+}
+
 

@@ -6,6 +6,8 @@ using Newtonsoft.Json;
 using ShapeForwardAPI.Models;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
+using System.Threading;
 
 namespace ShapeForwardAPI.Controllers
 {
@@ -14,18 +16,17 @@ namespace ShapeForwardAPI.Controllers
     {
         private readonly HttpClient _httpClient;
 
-        private static readonly string[] processingApiUrls = new[]
-        {
-            "http://localhost:5002/api/shape-processing/calculate-batch",
-            "http://localhost:5003/api/shape-processing/calculate-batch"
-        };
+        private Queue<List<ShapeInput>> _batchQueue = new Queue<List<ShapeInput>>();
+        private bool _api1Busy = false;
+        private bool _api2Busy = false;
 
-        private static int _lastUsedApiIndex = 0; 
-
+        private string _api1Url = "http://localhost:81/api/shape-processing/calculate-batch";
+       private string _api2Url = "http://localhost:82/api/shape-processing/calculate-batch";
+        
         public ShapeForwardController()
         {
             _httpClient = new HttpClient();
-            _httpClient.BaseAddress = new Uri("http://localhost:5002/");
+            _httpClient.BaseAddress = new Uri("http://localhost:81/");
         }
 
         [HttpPost]
@@ -78,6 +79,8 @@ namespace ShapeForwardAPI.Controllers
         [Route("")]
         public async Task<IHttpActionResult> Get([FromUri] string userId)
         {
+
+           
             var response = await _httpClient.GetAsync($"api/shape-processing?userId={userId}");
             if (!response.IsSuccessStatusCode)
             {
@@ -119,37 +122,74 @@ namespace ShapeForwardAPI.Controllers
 
             foreach (var batch in shapeBatches)
             {
-                
-                var apiUrl = processingApiUrls[_lastUsedApiIndex];
-                _lastUsedApiIndex = (_lastUsedApiIndex + 1) % processingApiUrls.Length;
 
-                var json = JsonConvert.SerializeObject(batch);
-                var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
-
-                var task = Task.Run(async () =>
-                {
-                    var client = new HttpClient();
-                    try
-                    {
-                        var response = await client.PostAsync($"{apiUrl}?userId={userId}", content);
-                        if (!response.IsSuccessStatusCode)
-                        {
-                            
-                            System.Diagnostics.Debug.WriteLine($"Batch gönderilemedi: {response.StatusCode}");
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        System.Diagnostics.Debug.WriteLine($"API çağrısı hatası: {ex.Message}");
-                    }
-                });
-
-                processingTasks.Add(task);
+                _batchQueue.Enqueue(batch); 
+             
             }
 
-            await Task.WhenAll(processingTasks);
+
+            TryAssignBatchToApi(1 , userId);
+            TryAssignBatchToApi(2 , userId);
 
             return Ok("All batches sent for calculation.");
+        }
+
+        private async Task TryAssignBatchToApi(int apiNumber, string userId)
+        {
+            if (_batchQueue.Count == 0)
+                return;
+
+
+            var batch = _batchQueue.Dequeue();
+            if (apiNumber == 1 && !_api1Busy )
+            {
+                _api1Busy = true;
+
+                
+               await SendBatchToApi(batch, _api1Url, 1 , userId);
+            }
+            else if (apiNumber == 2 && !_api2Busy)
+            {
+                _api2Busy = true;
+                
+                await SendBatchToApi(batch, _api2Url, 2 , userId);
+            }
+        }
+
+        private async Task SendBatchToApi(List<ShapeInput> batch, string apiUrl , int apiNumber, string userId)
+        { 
+            try
+            {
+
+                
+                var json = JsonConvert.SerializeObject(batch);
+                var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+                content.Headers.Add("X-Api-Name", $"ShapeProcessing{apiNumber}");
+
+                
+                var response = await _httpClient.PostAsync($"{apiUrl}?userId={userId}", content);
+                response.EnsureSuccessStatusCode();
+
+            }
+            catch(Exception ex) 
+            {
+                Console.WriteLine(ex.ToString());
+            }
+            finally
+            {
+                if(apiNumber == 1)
+                {
+                    
+                    _api1Busy = false;
+                    await TryAssignBatchToApi(1, userId);
+                }
+                else
+                {
+                    _api2Busy = false;
+                    await TryAssignBatchToApi(2, userId);
+                }
+            }
         }
 
 

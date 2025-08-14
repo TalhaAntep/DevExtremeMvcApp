@@ -119,7 +119,7 @@ namespace ShapeProcessingAPI.Controllers
                 if (shape == null)
                     continue;
 
-                Console.WriteLine($"[ShapeProcessingAPI:{Request.RequestUri}] İşleniyor -> ID: {shape.Id}, Shape: {shape.Shape}");
+               
 
                 switch (shape.Shape)
                 {
@@ -137,8 +137,13 @@ namespace ShapeProcessingAPI.Controllers
                         shape.CalculationResult = 0;
                         break;
                 }
-                Console.WriteLine($"[DEBUG] Shape={shape.Shape}, Width={shape.Width}, Height={shape.Height}, Result={shape.CalculationResult}");
-                System.Diagnostics.Debug.WriteLine($"[DEBUG] Shape={shape.Shape}, Width={shape.Width}, Height={shape.Height}, Result={shape.CalculationResult}");
+
+                var apiName = Request.Headers.Contains("X-Api-Name")
+                  ? Request.Headers.GetValues("X-Api-Name").FirstOrDefault()
+                  : "UnknownApi";
+
+                DbLogger.Log(apiName, userId, $"İşleniyor -> ID: {shape.Id}, Shape: {shape.Shape} ");
+
 
                 shape.IsCalculated = true;
             }
